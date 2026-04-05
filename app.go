@@ -65,7 +65,7 @@ func main(){
 			</div>
 			<div>
 				<form method="POST" action="/leds/set">
-					<p>Selecione os LEDs que deseja encender:</p>
+					<p>Selecione os LEDs que deseja acender:</p>
 					<p>
 					` + func() string {
 						var items string
@@ -111,7 +111,7 @@ func main(){
 				fmt.Printf("Failed to set brightness for %s: %v\n", led.Name, err)
 			}			
 		}
-		http.Redirect(w, r, "/leds", http.StatusSeeOther)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
 	fmt.Println("Starting server on :8080")
