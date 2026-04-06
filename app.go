@@ -1,13 +1,65 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
+
+var jwtSecret = make([]byte, 32)
+
+func initJWTKey() {
+	_, err := rand.Read(jwtSecret)
+	if err != nil {
+		panic(err)
+	}
+}
+
+type CustomClaims struct {
+	jwt.RegisteredClaims
+}
+
+func CreateToken() (string, error) {
+	claims := CustomClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer: "led-control",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+			IssuedAt: jwt.NewNumericDate(time.Now()),
+		},
+	}
+	
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+func ValidateToken(tokenString string) (*CustomClaims, error) {
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&CustomClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return jwtSecret, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*CustomClaims); ok && token.Valid {
+		return claims, nil
+	} else {
+		return nil, fmt.Errorf("invalid token")
+	}
+}
 
 type LED struct {
 	Name       string
@@ -47,9 +99,22 @@ func SetLedBrightness(ledName string, brightness uint8) error {
 }
 
 func main(){
+	initJWTKey()
 	var leds []LED
 
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		tokenString, _ := CreateToken()
+		http.SetCookie(w, &http.Cookie{
+			Name: "anti_ryan",
+			Value: tokenString,
+			Path: "/",
+			Domain: "leds.igoriglesias.com",
+			HttpOnly: true,
+			// Expires: time.Now().Add(10 * time.Minute),
+			Secure: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
 		leds = ListLEDs()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(`
@@ -93,6 +158,16 @@ func main(){
 	})
 
 	http.HandleFunc("POST /leds/set", func(w http.ResponseWriter, r *http.Request) {
+		csrfToken, err := r.Cookie("anti_ryan")
+		if err != nil {
+			http.Error(w, "Missing CSRF token", http.StatusBadRequest)
+			return
+		}
+		if _, err := ValidateToken(csrfToken.Value); err != nil {
+			http.Error(w, "Invalid CSRF token", http.StatusBadRequest)
+			return
+		}
+
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Invalid form data", http.StatusBadRequest)
 			return
