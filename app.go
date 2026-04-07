@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -61,6 +62,35 @@ func ValidateToken(tokenString string) (*CustomClaims, error) {
 	}
 }
 
+func SetCookie(w http.ResponseWriter) {
+	tokenString, _ := CreateToken()
+	http.SetCookie(w, &http.Cookie{
+		Name: "anti_ryan",
+		Value: tokenString,
+		Path: "/",
+		Domain: "leds.igoriglesias.com",
+		HttpOnly: true,
+		// Expires: time.Now().Add(10 * time.Minute),
+		Secure: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func VerifyCookie(r *http.Request) error {
+	csrfToken, err := r.Cookie("anti_ryan")
+
+	if err != nil {
+		return fmt.Errorf("Missing CSRF token")
+	}
+
+	if _, err := ValidateToken(csrfToken.Value); err != nil {
+		return fmt.Errorf("Invalid CSRF token")
+	}
+
+	return nil
+}
+
+
 type LED struct {
 	Name       string
 	Brightness uint8
@@ -71,7 +101,7 @@ const ledsPath = "/sys/class/leds"
 func ListLEDs() []LED {
 	entries, err := os.ReadDir(ledsPath)
 	if err != nil {
-		fmt.Errorf("failed to read LEDs directory: %w", err)
+		fmt.Printf("failed to read LEDs directory: %s", err)
 	}
 
 	var leds []LED
@@ -103,19 +133,10 @@ func main(){
 	var leds []LED
 
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		tokenString, _ := CreateToken()
-		http.SetCookie(w, &http.Cookie{
-			Name: "anti_ryan",
-			Value: tokenString,
-			Path: "/",
-			Domain: "leds.igoriglesias.com",
-			HttpOnly: true,
-			// Expires: time.Now().Add(10 * time.Minute),
-			Secure: true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		SetCookie(w)
 
 		leds = ListLEDs()
+
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(`
 		<!DOCTYPE html>
@@ -158,13 +179,9 @@ func main(){
 	})
 
 	http.HandleFunc("POST /leds/set", func(w http.ResponseWriter, r *http.Request) {
-		csrfToken, err := r.Cookie("anti_ryan")
+		err := VerifyCookie(r)
 		if err != nil {
-			http.Error(w, "Missing CSRF token", http.StatusBadRequest)
-			return
-		}
-		if _, err := ValidateToken(csrfToken.Value); err != nil {
-			http.Error(w, "Invalid CSRF token", http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -176,12 +193,19 @@ func main(){
 		selectedLEDs := r.Form["led"]
 		for _, led := range leds {
 			brightness := uint8(0)
-			for _, selected := range selectedLEDs {
-				if selected == led.Name {
-					brightness = 255
-					break
-				}
+			
+			if slices.Contains(selectedLEDs, led.Name){
+				brightness = 255
 			}
+			
+			if slices.Contains(selectedLEDs, led.Name) {
+				brightness = 255
+			}
+
+			if brightness == led.Brightness	{
+				continue
+			}
+
 			if err := SetLedBrightness(led.Name, brightness); err != nil {
 				fmt.Printf("Failed to set brightness for %s: %v\n", led.Name, err)
 			}			
