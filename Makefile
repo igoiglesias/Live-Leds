@@ -1,6 +1,7 @@
 BUILD_DIR = build
 CFLAGS = -ldflags="-s -w"
 ROUTER_IP = 172.16.0.4
+SERVER_IP = 10.10.0.100
 GO_VERSION = 1.22.10
 
 run: 
@@ -24,3 +25,5 @@ clean:
 deploy-router: build-mips
 	scp -O $(BUILD_DIR)/app-mips root@$(ROUTER_IP):/tmp
 	
+deploy-server: build-mips
+	scp -O $(BUILD_DIR)/app-mips iglesias@$(SERVER_IP):~/go-router/

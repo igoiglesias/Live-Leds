@@ -147,7 +147,8 @@ func main(){
 		</head>
 		<body>
 			<div>
-				<h1>LEDs</h2>
+				<h1>LEDs</h1>
+				<small>Esse é um projeto de automação feito em <a href="https://www.youtube.com/watch?v=L0cuSrDs8So&list=PLwuyavmn5qKrxLaiUoGfRgkB-7uwYNx8o">Live no YouTube</a>.<br>Ele consiste em um roteador Tp-Link WR740N com Firmware OpenWrt e um aplicação em GO rodando internamente e tomando o controle dos LEDs. Dessa forma, através de uma interface web, é possível controlar o brilho dos LEDs.</small>
 			</div>
 			<div>
 				<form method="POST" action="/leds/set">
